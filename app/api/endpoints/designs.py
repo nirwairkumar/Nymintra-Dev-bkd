@@ -89,12 +89,16 @@ def get_designs(skip: int = 0, limit: int = 20, category: str = None, supabase: 
     """
     Retrieve card designs. Filters by published/active status.
     """
-    query = supabase.table("card_designs").select("*").eq("is_active", True)
-    if category:
-        query = query.filter("categories", "cs", f'["{category}"]')
-    
-    response = query.order("sort_order", desc=True).range(skip, skip + limit - 1).execute()
-    return response.data
+    try:
+        query = supabase.table("card_designs").select("*").eq("is_active", True)
+        if category:
+            query = query.filter("categories", "cs", f'["{category}"]')
+        
+        response = query.order("sort_order", desc=True).range(skip, skip + limit - 1).execute()
+        return response.data
+    except Exception as e:
+        logger.error(f"Error fetching designs: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 @router.get("/by-id/{id}", response_model=CardDesignResponse)
 def get_design_by_id(id: str, supabase: Client = Depends(get_supabase)):
