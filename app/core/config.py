@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     SUPABASE_KEY: str = ""
 
     # FRONTEND (Comma-separated for multiple origins)
-    FRONTEND_URLS: str = "http://localhost:3000,http://localhost:5173,https://nymintra.pages.dev"
+    FRONTEND_URLS: str = "http://localhost:5173,https://nymintra.com,https://www.nymintra.com"
     
     @property
     def cors_origins(self) -> list[str]:

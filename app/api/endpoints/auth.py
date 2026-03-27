@@ -11,6 +11,12 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/auth/login")
 @router.post("/register", response_model=Token)
 def register(user_in: UserCreate, supabase: Client = Depends(get_supabase)):
     try:
+        # Pre-check if user already exists
+        admin_client = get_supabase()
+        existing_user = admin_client.table("users").select("id").eq("email", user_in.email).execute()
+        if existing_user.data:
+            raise HTTPException(status_code=400, detail="Account already exists for this email")
+
         # 1. Sign up with Supabase Auth
         # Email is now required, phone is optional
         auth_params = {
@@ -29,17 +35,24 @@ def register(user_in: UserCreate, supabase: Client = Depends(get_supabase)):
         if not auth_res.user:
             raise HTTPException(status_code=400, detail="Failed to create auth user")
 
-        # 2. Insert into public.users table (Metadata)
-        # Link via the UUID from Supabase Auth
+        # 2. Insert into public.users table (Metadata) using a fresh client
+        # This ensures we use the service_role and bypass RLS even if sign_up modified the session
+        admin_client = get_supabase()
+        
+        # Sanitize phone: ensure empty strings are treated as NULL to avoid unique constraint violations
+        phone = user_in.phone.strip() if user_in.phone else None
+        if not phone:
+            phone = None
+
         new_user_data = {
             "id": auth_res.user.id,
             "name": user_in.name,
             "email": user_in.email,
-            "phone": user_in.phone,
+            "phone": phone,
             "auth_provider": "supabase"
         }
         
-        supabase.table("users").upsert(new_user_data).execute()
+        admin_client.table("users").upsert(new_user_data).execute()
         
         return {
             "access_token": auth_res.session.access_token if auth_res.session else "pending_verification",
@@ -74,6 +87,13 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), supabase: Client = D
         }
     except Exception as e:
         err_str = str(e).lower()
+        if isinstance(e, HTTPException):
+            raise e
+        print(f"Login error details: {e}") # Log for debugging
+        if "email not confirmed" in err_str:
+            raise HTTPException(status_code=403, detail="Please verify your email address to log in.")
+        if "invalid login credentials" in err_str:
+             raise HTTPException(status_code=401, detail="Invalid credentials. Please check your email and password.")
         if "timeout" in err_str or "readtimeout" in err_str:
             raise HTTPException(status_code=503, detail="Login service timed out, please try again")
         raise HTTPException(status_code=401, detail=f"Login failed: {str(e)}")
