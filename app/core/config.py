@@ -12,10 +12,15 @@ class Settings(BaseSettings):
 
     # FRONTEND (Comma-separated for multiple origins)
     FRONTEND_URLS: str = "http://localhost:3000,http://localhost:5173,https://nymintra.com,https://www.nymintra.com"
+    FRONTEND_URL: str = ""  # Alias for backend/.env singular form
     
     @property
     def cors_origins(self) -> list[str]:
-        return [url.strip() for url in self.FRONTEND_URLS.split(",") if url.strip()]
+        # Combine FRONTEND_URLS and FRONTEND_URL
+        origins = [url.strip() for url in self.FRONTEND_URLS.split(",") if url.strip()]
+        if self.FRONTEND_URL:
+            origins.append(self.FRONTEND_URL.strip())
+        return list(set(origins))
     
     # RAZORPAY
     RAZORPAY_KEY_ID: str = ""
