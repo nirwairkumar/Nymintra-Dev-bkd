@@ -17,7 +17,7 @@ class OrderCreate(BaseModel):
 class OrderStatusUpdate(BaseModel):
     status: str
 
-@router.post("/", response_model=Dict[str, Any])
+@router.post("", response_model=Dict[str, Any])
 def create_order(
     order_in: OrderCreate, 
     current_user: dict = Depends(get_current_user),
@@ -134,7 +134,7 @@ def create_order(
             )
         raise HTTPException(status_code=500, detail=f"Order creation failed: {err_msg}")
 
-@router.get("/", response_model=List[Dict[str, Any]])
+@router.get("", response_model=List[Dict[str, Any]])
 def get_user_orders(
     current_user: dict = Depends(get_current_user),
     supabase = Depends(get_supabase)
