@@ -18,6 +18,7 @@ class CardDesignBase(BaseModel):
     categories: List[str] # Changed to support multiple categories
     style: Optional[str] = None
     description: Optional[str] = None
+    original_price: Optional[float] = None
     base_price: float
     min_quantity: int = 50 # New field for minimum purchase
     thumbnail_url: HttpUrl
@@ -43,6 +44,7 @@ class CardDesignUpdate(BaseModel):
     categories: Optional[List[str]] = None
     style: Optional[str] = None
     description: Optional[str] = None
+    original_price: Optional[float] = None
     base_price: Optional[float] = None
     min_quantity: Optional[int] = None
     thumbnail_url: Optional[HttpUrl] = None
