@@ -1,8 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from supabase import Client
 from app.db.database import get_supabase
-from app.schemas.user import Token, UserCreate
+from app.schemas.user import Token, UserCreate, ForgotPasswordRequest, ResetPasswordConfirm
 # Removed jose and custom security imports as we'll use Supabase Auth directly
 
 router = APIRouter()
@@ -140,3 +140,59 @@ def admin_login(form_data: OAuth2PasswordRequestForm = Depends(), supabase: Clie
         if "timeout" in err_str or "readtimeout" in err_str:
             raise HTTPException(status_code=503, detail="Admin service timed out, please try again")
         raise HTTPException(status_code=401, detail=str(e))
+
+@router.post("/forgot-password")
+def forgot_password(request: ForgotPasswordRequest, req: Request, supabase: Client = Depends(get_supabase)):
+    try:
+        # Try to determine the frontend URL to redirect back to /reset-password
+        # We check the origin or referer headers to make it work for both dev and prod
+        origin = req.headers.get("origin") or req.headers.get("referer")
+        
+        # Default fallback
+        redirect_to = "https://nymintra.com/reset-password"
+        
+        if origin:
+            # Clean the origin URL (remove path, just keep scheme + domain)
+            from urllib.parse import urlparse
+            parsed = urlparse(origin)
+            origin_base = f"{parsed.scheme}://{parsed.netloc}"
+            redirect_to = f"{origin_base}/reset-password"
+
+        # Supabase will send an email with a reset link
+        # Specifying redirect_to ensures the link takes the user to our reset page
+        supabase.auth.reset_password_for_email(request.email, options={"redirect_to": redirect_to})
+        return {"message": "If an account with that email exists, a password reset link has been sent."}
+    except Exception as e:
+        # We don't want to leak whether the email exists or not for security, 
+        # but for debugging we might want to log it.
+        print(f"Forgot password error: {e}")
+        return {"message": "If an account with that email exists, a password reset link has been sent."}
+
+@router.post("/reset-password")
+def reset_password(request: ResetPasswordConfirm, token: str = Depends(oauth2_scheme), supabase: Client = Depends(get_supabase)):
+    try:
+        # 1. Verify the token is valid and get the user
+        auth_res = supabase.auth.get_user(token)
+        if not auth_res.user:
+             raise HTTPException(status_code=401, detail="Invalid or expired reset token")
+             
+        # 2. Update user password using the admin client
+        # This bypasses the need for a session on the client itself, 
+        # which is more reliable for backend-side updates.
+        supabase.auth.admin.update_user_by_id(
+            auth_res.user.id, 
+            attributes={"password": request.new_password}
+        )
+        return {"message": "Password has been reset successfully."}
+    except Exception as e:
+        print(f"Reset password error: {e}")
+        error_msg = str(e)
+        if "Auth session missing" in error_msg:
+            # Fallback if admin method is not available or failed due to session
+            try:
+                supabase.auth.set_session(access_token=token, refresh_token="")
+                supabase.auth.update_user({"password": request.new_password})
+                return {"message": "Password has been reset successfully."}
+            except Exception as e2:
+                raise HTTPException(status_code=400, detail=f"Failed to reset password: {str(e2)}")
+        raise HTTPException(status_code=400, detail=f"Failed to reset password: {error_msg}")

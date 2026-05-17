@@ -26,3 +26,9 @@ class Token(BaseModel):
 
 class TokenData(BaseModel):
     phone: Optional[str] = None
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+class ResetPasswordConfirm(BaseModel):
+    new_password: str
